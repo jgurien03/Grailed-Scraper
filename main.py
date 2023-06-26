@@ -91,7 +91,7 @@ if __name__ == '__main__':
 base_url = "https://www.grailed.com/designers/20471120"
 COOKIES_PATH = "cookies.pkl"
 time1 = random.randint(2, 6)
-MP3_PATH = r'C:\Users\Jake Gurien\PycharmProjects\mcjpbot\Grailed-Scraper'
+MP3_PATH = r'{}'.format(os.getcwd())
 
 def login_to_grailed(username, password):
     # Instantiate the WebDriver (e.g., Chrome driver)
