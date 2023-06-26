@@ -500,8 +500,8 @@ data = {
 
 categories = {
         'Tops': ['shirt', 'blouse', 't-shirt', 'tee', 'long-sleeve', 'longsleeve', 'long sleeve', 'short sleeve', 'sweater', 'tank', 'tank top', 'top', 'button-up', 'button-down', 'vest', 'polo', 'crop-top', 'box logo', 'sweatshirt'],
-        'Bottoms': ['pants', 'jeans', 'skirt', 'flare', 'baggy', 'pant', 'cargo', 'talon-zip', 'dickies', 'painted denim', 'sweatpants', 'shorts', 'pleats please', 'joggers'],
-        'Skirts': ['maxi', 'skirt', 'mini-skirt', 'pleated skirt'],
+        'Bottoms': ['pants', 'jeans', 'flare', 'baggy', 'pant', 'cargo', 'talon-zip', 'dickies', 'painted denim', 'sweatpants', 'shorts', 'pleats please', 'joggers'],
+        'Skirts': ['maxi', 'skirt', 'mini-skirt', 'pleated skirt', 'mini skirt', 'midi', 'midi skirt'],
         'Dresses': ['dress', 'gown'],
         'Shoes': ['shoes', 'sneakers', 'boots', 'jordan', 'air force one', 'chuck 70', 'guidi', 'rick owens ramones', 'dunk', 'gucci slides'],
         'Outerwear': ['Jacket', 'Puffer', 'jacket', 'coat', 'blazer', 'bomber', 'trenchcoat', 'trucker jacket', 'hoodie', 'zip-up', 'pullover', 'windbreaker', 'cardigan', 'Denim Trucker Jacket'],
@@ -511,7 +511,7 @@ categories = {
 
 df = pd.DataFrame(data)
 df.insert(1,"Category", " ")
-#model = load_model('model.h5')
+model = load_model('model.h5')
 df['Category'] = df['Title'].apply(clean_up_categories)
 for index, row in df.iterrows():
     size = row['Size']
