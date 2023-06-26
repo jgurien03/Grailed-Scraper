@@ -298,16 +298,7 @@ def clean_up_categories(cell):
             for synonym in synonyms:
                 if synonym.lemmas()[0].name().lower() in cell_lower:
                     return category
-    for index, row in df.iterrows():
-        size = row['Size']
-        print(size)
-        if isinstance(size, str) and size.lower() == 'os':
-            df.at[index, 'Category'] = 'Accessories'
-        elif isinstance(size, (int, float)) and 22 <= size <= 50:
-            df.at[index, 'Category'] = 'Bottoms'
-        elif isinstance(size, (int, float)) and 4 <= size <= 15:
-            df.at[index, 'Category'] = 'Shoes'
-    return 'Outerwear' or 'Tops'
+    return 'Shoes'
 
 
 def visualize_category_distribution(df):
@@ -503,6 +494,14 @@ df = pd.DataFrame(data)
 df.insert(1,"Category", " ")
 #model = load_model('model.h5')
 df['Category'] = df['Title'].apply(clean_up_categories)
+for index, row in df.iterrows():
+    size = row['Size']
+    if isinstance(size, str) and size.lower() == 'os':
+        df.at[index, 'Category'] = 'Accessories'
+    elif isinstance(size, (int, float)) and 22 <= size <= 50:
+        df.at[index, 'Category'] = 'Bottoms'
+    elif isinstance(size, (int, float)) and 4 <= size <= 15:
+            df.at[index, 'Category'] = 'Shoes'
 df = filter_rows_by_keyword(df, brand)
 df['Current Price'] = df['Current Price'].str.replace('[^\d.]', '', regex=True)
 df['Current Price'] = pd.to_numeric(df['Current Price'])
