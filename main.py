@@ -438,7 +438,6 @@ def plot_price_vs_upload_date(df, date):
         print('Not enough data to show')
     
     
-
 def filter_rows_by_keyword(df, keyword):
     df['Cleaned Title'] = df['Title'].str.lower().apply(lambda x: re.sub(r'[^\w\s]', '', x))
     cols = df.columns.tolist()
@@ -452,6 +451,26 @@ def filter_rows_by_keyword(df, keyword):
 def filter_dataframe_by_category(df, category_col, category):
     filtered_df = df[df[category_col] == category].copy()
     return filtered_df
+
+def plot_price_by_size(df, size_col, price_col):
+    grouped_df = df.groupby(size_col).agg({price_col: 'mean', size_col: 'count'})
+    grouped_df.rename(columns={size_col: 'Volume'}, inplace=True)
+    sorted_df = grouped_df.sort_values(price_col)
+    cmap = plt.cm.get_cmap('viridis')
+    normalized_volume = (sorted_df['Volume'] - sorted_df['Volume'].min()) / (sorted_df['Volume'].max() - sorted_df['Volume'].min())
+    colors = cmap(normalized_volume)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars = ax.bar(sorted_df.index, sorted_df[price_col], color=colors)
+    plt.xlabel('Size Category')
+    plt.ylabel('Price')
+    plt.title('Average Price by Size Category')
+    sm = plt.cm.ScalarMappable(cmap=cmap)
+    sm.set_array(sorted_df['Volume'])
+    cbar = plt.colorbar(sm, ax=ax)
+    cbar.set_label('Volume')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
 
 
 titles = []
@@ -520,19 +539,34 @@ else:
     print("Graph display skipped.")
 response3 = input("Would you like to see the brand's change in price over time? (yes/no): ")
 if response3.lower() == 'yes':
-    date = input("Would you like to search by days, months, or years? (days/months/years) ")
-if date.lower() == 'days' or date.lower() =='months' or date.lower() == 'years':
-    response4 = input("Would you like to only visualize a certain category of brand? (yes/no): ")
-if response3.lower() == 'yes':
     df2 = df
-    if response4.lower() == 'yes':
-        response5 = input("Select a category: (Tops, Bottoms, Skirts, Dresses, Shoes, Outerwear, Accessories) ")
-        df2 = filter_dataframe_by_category(df, 'Category', response5)
-        plot_price_vs_upload_date(df2, date)
+    date = input("Would you like to search by days, months, or years? (days/months/years) ")
+    if date.lower() == 'days' or date.lower() =='months' or date.lower() == 'years':
+        response4 = input("Would you like to only visualize a certain category of brand? (yes/no): ")
+        if response4.lower() == 'yes':
+            response5 = input("Select a category: (Tops, Bottoms, Skirts, Dresses, Shoes, Outerwear, Accessories) ")
+            df2 = filter_dataframe_by_category(df, 'Category', response5)
+            plot_price_vs_upload_date(df2, date)
+        else:
+            plot_price_vs_upload_date(df2, date)
     else:
-        plot_price_vs_upload_date(df2, date)
+        print('Must specify days, months, or years')
 else:
     print("Graph display skipped.") 
+response6 = input("Would you like to see each size and their average price? (yes/no): ")
+if response6.lower() == 'yes':
+    df3 = df
+    response7 = input("Would you like to only visualize a certain category of brand? (yes/no): ")
+    if response7.lower() == 'yes':
+        response8 = input("Select a category: (Tops, Bottoms, Skirts, Dresses, Shoes, Outerwear, Accessories) ")
+        df3 = filter_dataframe_by_category(df, 'Category', response8)
+        plot_price_by_size(df3, 'Size', 'Original Price')
+    else:
+        plot_price_by_size(df3, 'Size', 'Original Price')
+else:
+    print("Graph display skipped.")
+        
+
 
 
 
