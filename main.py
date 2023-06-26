@@ -91,7 +91,7 @@ if __name__ == '__main__':
 base_url = "https://www.grailed.com/designers/20471120"
 COOKIES_PATH = "cookies.pkl"
 time1 = random.randint(2, 6)
-MP3_PATH = r'C:\Users\Jake Gurien\PycharmProjects\mcjpbot'
+MP3_PATH = r'C:\Users\Jake Gurien\PycharmProjects\mcjpbot\Grailed-Scraper'
 
 def login_to_grailed(username, password):
     # Instantiate the WebDriver (e.g., Chrome driver)
@@ -298,7 +298,16 @@ def clean_up_categories(cell):
             for synonym in synonyms:
                 if synonym.lemmas()[0].name().lower() in cell_lower:
                     return category
-    return 'Shoes'
+    for index, row in df.iterrows():
+        size = row['Size']
+        print(size)
+        if isinstance(size, str) and size.lower() == 'os':
+            df.at[index, 'Category'] = 'Accessories'
+        elif isinstance(size, (int, float)) and 22 <= size <= 50:
+            df.at[index, 'Category'] = 'Bottoms'
+        elif isinstance(size, (int, float)) and 4 <= size <= 15:
+            df.at[index, 'Category'] = 'Shoes'
+    return 'Outerwear' or 'Tops'
 
 
 def visualize_category_distribution(df):
@@ -492,7 +501,7 @@ categories = {
 
 df = pd.DataFrame(data)
 df.insert(1,"Category", " ")
-model = load_model('model.h5')
+#model = load_model('model.h5')
 df['Category'] = df['Title'].apply(clean_up_categories)
 df = filter_rows_by_keyword(df, brand)
 df['Current Price'] = df['Current Price'].str.replace('[^\d.]', '', regex=True)
@@ -511,8 +520,10 @@ if response2.lower() == 'yes':
 else:
     print("Graph display skipped.")
 response3 = input("Would you like to see the brand's change in price over time? (yes/no): ")
-date = input("Would you like to search by days, months, or years? (days/months/years) ")
-response4 = input("Would you like to only visualize a certain category of brand? (yes/no): ")
+if response3.lower() == 'yes':
+    date = input("Would you like to search by days, months, or years? (days/months/years) ")
+if date.lower() == 'days' or date.lower() =='months' or date.lower() == 'years':
+    response4 = input("Would you like to only visualize a certain category of brand? (yes/no): ")
 if response3.lower() == 'yes':
     df2 = df
     if response4.lower() == 'yes':
