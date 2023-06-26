@@ -298,7 +298,7 @@ def clean_up_categories(cell):
             for synonym in synonyms:
                 if synonym.lemmas()[0].name().lower() in cell_lower:
                     return category
-    return 'Shoes'
+    return 'Outerwear' or 'Tops'
 
 
 def visualize_category_distribution(df):
