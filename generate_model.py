@@ -69,7 +69,7 @@ from sklearn.preprocessing import LabelEncoder
 from gensim.models import LdaModel
 from gensim.corpora import Dictionary
 
-def make_model(learning_rate):
+def make_model(learning_rate, num_classes):
     base_model = Xception(
         weights='imagenet',
         input_shape=(150, 150, 3),
@@ -79,15 +79,14 @@ def make_model(learning_rate):
     inputs = Input(shape=(150, 150, 3))
     base = base_model(inputs, training=False)
     vector = GlobalAveragePooling2D()(base)
-    outputs = Dense(10)(vector)
+    outputs = Dense(num_classes, activation='softmax')(vector)
     model = Model(inputs, outputs)
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate),
-        loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
-        metrics=["accuracy"],
+        optimizer=Adam(learning_rate=learning_rate),
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
     )
     return model
-
 def train_model(train_dir, val_dir, learning_rate=0.001, epochs=18, batch_size=32, save_path='model.h5'):
     image_size = (150, 150)
     train_gen = ImageDataGenerator(preprocessing_function=tf.keras.applications.xception.preprocess_input)
@@ -96,15 +95,16 @@ def train_model(train_dir, val_dir, learning_rate=0.001, epochs=18, batch_size=3
         seed=1,
         target_size=image_size,
         batch_size=batch_size,
-    ) 
+    )
     validation_gen = ImageDataGenerator(preprocessing_function=tf.keras.applications.xception.preprocess_input)
     val_ds = validation_gen.flow_from_directory(
         val_dir,
         seed=1,
         target_size=image_size,
         batch_size=batch_size,
-    ) 
-    model = make_model(learning_rate)
+    )
+    num_classes = len(train_ds.class_indices)
+    model = make_model(learning_rate, num_classes)
     early_stopping = EarlyStopping(patience=3, restore_best_weights=True)
     history = model.fit(
         train_ds,

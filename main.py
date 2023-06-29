@@ -277,7 +277,7 @@ def sort_results(driver, results):
 
 
 def predict_categories(model, image_paths):
-    class_names = ['dress', 'hat', 'longsleeve', 'outwear', 'pants', 'shirt', 'shoes', 'shorts', 'skirt', 't-shirt']
+    class_names = ['Accessories', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Skirts', 'Tops']
     response = requests.get(image_paths)
     img = image.load_img(BytesIO(response.content), target_size=(150, 150))
     img = image.img_to_array(img)
@@ -298,7 +298,7 @@ def clean_up_categories(cell):
             for synonym in synonyms:
                 if synonym.lemmas()[0].name().lower() in cell_lower:
                     return category
-    return 'Outerwear' or 'Tops'
+    return 'Other'
 
 
 def visualize_category_distribution(df):
@@ -504,7 +504,7 @@ categories = {
         'Skirts': ['maxi', 'skirt', 'mini-skirt', 'pleated skirt', 'mini skirt', 'midi', 'midi skirt'],
         'Dresses': ['dress', 'gown'],
         'Shoes': ['shoes', 'sneakers', 'boots', 'jordan', 'air force one', 'chuck 70', 'guidi', 'rick owens ramones', 'dunk', 'gucci slides'],
-        'Outerwear': ['Jacket', 'Puffer', 'jacket', 'coat', 'blazer', 'bomber', 'trenchcoat', 'trucker jacket', 'hoodie', 'zip-up', 'pullover', 'windbreaker', 'cardigan', 'Denim Trucker Jacket'],
+        'Outerwear': ['Outerwear', 'Jacket', 'Puffer', 'jacket', 'coat', 'blazer', 'bomber', 'trenchcoat', 'trucker jacket', 'hoodie', 'zip-up', 'pullover', 'windbreaker', 'cardigan', 'Denim Trucker Jacket'],
         'Accessories': ['Sunglasses', 'Apron', 'Necklace', 'Watch', 'Socks', 'Tie', 'Bow tie', 'Purse', 'Ring', 'Gloves', 'belt', 
                       'Scarf', 'Umbrella', 'Boots', 'Mittens', 'Stockings', 'Earmuffs', 'Hair band', 'Safety pin', 'Watch', 'Hat', 'Beanie', 'Cap', 'Beret', 'card holder', 'Straw hat', 'Derby hat', 'Helmet', 'Top hat', 'Mortar board']
 }
@@ -513,6 +513,7 @@ df = pd.DataFrame(data)
 df.insert(1,"Category", " ")
 model = load_model('model.h5')
 df['Category'] = df['Title'].apply(clean_up_categories)
+df = filter_rows_by_keyword(df, brand)
 for index, row in df.iterrows():
     size = row['Size']
     if isinstance(size, str) and size.lower() == 'os':
@@ -521,7 +522,11 @@ for index, row in df.iterrows():
         df.at[index, 'Category'] = 'Bottoms'
     elif isinstance(size, (int, float)) and 4 <= size <= 15:
             df.at[index, 'Category'] = 'Shoes'
-df = filter_rows_by_keyword(df, brand)
+for index, item in df.iterrows():
+    if df.at[index, 'Category'] == 'Other':
+        df.at[index, 'Category'] = predict_categories(model, item['Image Link'])
+        print(df.at[index, 'Category'])
+        print('grailed.com' + df.at[index, 'Listing Link'])
 df['Current Price'] = df['Current Price'].str.replace('[^\d.]', '', regex=True)
 df['Current Price'] = pd.to_numeric(df['Current Price'])
 df['Original Price'] = df['Original Price'].str.replace('[^\d.]', '', regex=True)
@@ -565,7 +570,6 @@ if response6.lower() == 'yes':
         plot_price_by_size(df3, 'Size', 'Original Price')
 else:
     print("Graph display skipped.")
-        
 
 
 
