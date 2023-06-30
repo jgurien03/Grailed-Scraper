@@ -277,7 +277,7 @@ def sort_results(driver, results):
 
 
 def predict_categories(model, image_paths):
-    class_names = ['Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Skirts', 'Tops']
+    class_names = ['Accessories', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Skirts', 'Tops']
     response = requests.get(image_paths)
     img = image.load_img(BytesIO(response.content), target_size=(150, 150))
     img = image.img_to_array(img)
