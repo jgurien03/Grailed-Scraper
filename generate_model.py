@@ -105,7 +105,7 @@ def train_model(train_dir, val_dir, learning_rate=0.001, epochs=18, batch_size=3
     )
     num_classes = len(train_ds.class_indices)
     model = make_model(learning_rate, num_classes)
-    early_stopping = EarlyStopping(patience=3, restore_best_weights=True)
+    early_stopping = EarlyStopping(patience=2, restore_best_weights=True)
     history = model.fit(
         train_ds,
         epochs=epochs,

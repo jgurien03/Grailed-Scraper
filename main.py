@@ -10,6 +10,9 @@ import random
 import requests
 import datefinder
 import pickle
+import torch
+import torch.nn as nn
+from sklearn.preprocessing import MinMaxScaler
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver import Chrome
@@ -58,6 +61,7 @@ from tensorflow import keras
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 from keras.layers import Dense, Flatten
+import locale
 from keras.models import Sequential, load_model
 import keras.utils as image
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -482,6 +486,58 @@ def plot_price_by_size(df, size_col, price_col):
     plt.show()
 
 
+def predict_future_prices(df1, target_year, target_month):
+    df = df1
+    df = df.groupby([df['Relative Date'].dt.year.rename('Year'), df['Relative Date'].dt.month.rename('Month')])['Original Price'].mean().reset_index()
+    df['Volume'] = df.groupby(['Year', 'Month'])['Original Price'].transform('count')  # Generate synthetic volume based on count of prices
+    train_size = int(len(df) * 0.8)
+    train_data = df.iloc[:train_size]
+    test_data = df.iloc[train_size:]
+    scaler = MinMaxScaler()
+    train_data_scaled = scaler.fit_transform(train_data[['Original Price', 'Volume']])
+    test_data_scaled = scaler.transform(test_data[['Original Price', 'Volume']])
+    train_tensor = torch.from_numpy(train_data_scaled).float()
+    test_tensor = torch.from_numpy(test_data_scaled).float()
+    class LSTM(nn.Module):
+        def __init__(self, input_size, hidden_size, output_size):
+            super(LSTM, self).__init__()
+            self.hidden_size = hidden_size
+            self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+            self.fc = nn.Linear(hidden_size, output_size)
+        def forward(self, x):
+            out, _ = self.lstm(x)
+            out = self.fc(out[:, -1, :])
+            return out
+    input_size = 2  # Two input features: Original Price and Volume
+    hidden_size = 32
+    output_size = 1
+    num_epochs = 100
+    learning_rate = 0.001
+    model = LSTM(input_size, hidden_size, output_size)
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    for epoch in range(num_epochs):
+        model.train()
+        optimizer.zero_grad()
+        outputs = model(train_tensor[:-1].unsqueeze(dim=0))
+        loss = criterion(outputs.squeeze(), train_tensor[1:].squeeze())
+        loss.backward()
+        optimizer.step()
+    model.eval()
+    with torch.no_grad():
+        future_tensor = torch.zeros(1, 2)  # Initialize a tensor for future prediction
+        future_tensor[0, 0] = test_data_scaled[-1, 0]  # Last observed price
+        future_tensor[0, 1] = test_data_scaled[-1, 1]  # Last observed volume
+        predicted_prices = []  # List to store predicted prices for each future month
+        for _ in range(target_month):
+            future_prediction = model(future_tensor.unsqueeze(dim=0))  # Make prediction for next month
+            future_tensor = torch.cat((future_tensor[:, :1], future_prediction), dim=1)
+            predicted_price = future_prediction.squeeze().item()
+    locale.setlocale(locale.LC_ALL, '')  # Use the default system locale for formatting
+    formatted_price = locale.currency(predicted_price, grouping=True)
+    return formatted_price
+
+
 titles = []
 prices = []
 old_prices = []
@@ -513,7 +569,7 @@ categories = {
         'Skirts': ['maxi', 'skirt', 'mini-skirt', 'pleated skirt', 'mini skirt', 'midi', 'midi skirt'],
         'Dresses': ['dress', 'gown'],
         'Shoes': ['shoes', 'sneakers', 'boots', 'jordan', 'air force one', 'chuck 70', 'guidi', 'rick owens ramones', 'dunk', 'gucci slides'],
-        'Outerwear': ['Suit', 'Outerwear', 'Jacket', 'Puffer', 'jacket', 'coat', 'blazer', 'bomber', 'trenchcoat', 'trucker jacket', 'hoodie', 'zip-up', 'pullover', 'windbreaker', 'cardigan', 'Denim Trucker Jacket'],
+        'Outerwear': ['Fur leather', 'Half zip', 'Quarter zip', 'Suit', 'Outerwear', 'Jacket', 'Puffer', 'jacket', 'coat', 'blazer', 'bomber', 'trenchcoat', 'trucker jacket', 'hoodie', 'zip-up', 'pullover', 'windbreaker', 'cardigan', 'Denim Trucker Jacket'],
         'Accessories': ['Sunglasses', 'Apron', 'Necklace', 'Watch', 'Socks', 'Tie', 'Bow tie', 'Purse', 'Ring', 'Gloves', 'belt', 
                       'Scarf', 'Umbrella', 'Boots', 'Mittens', 'Stockings', 'Earmuffs', 'Hair band', 'Safety pin', 'Watch', 'Hat', 'Beanie', 'Cap', 'Beret', 'card holder', 'Straw hat', 'Derby hat', 'Helmet', 'Top hat', 'Mortar board']
 }
@@ -579,7 +635,9 @@ if response6.lower() == 'yes':
         plot_price_by_size(df3, 'Size', 'Original Price')
 else:
     print("Graph display skipped.")
-
+df4 = df
+predicted_price = predict_future_prices(df4, 2023, 8)
+print("Predicted price for August 2023:", predicted_price)
 
 
 
