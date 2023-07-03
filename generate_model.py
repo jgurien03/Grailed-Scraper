@@ -115,6 +115,6 @@ def train_model(train_dir, val_dir, learning_rate=0.001, epochs=18, batch_size=3
     model.save(save_path)
     return model, history
 
-train_dir = 'clothing-dataset-small/train'
-val_dir = 'clothing-dataset-small/validation'
+train_dir = 'new_dataset/train'
+val_dir = 'new_dataset/validation'
 model, history = train_model(train_dir, val_dir, learning_rate=0.001, epochs=18, batch_size=32, save_path='model.h5')

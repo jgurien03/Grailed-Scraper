@@ -24,6 +24,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 import cv2
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import NoSuchElementException
 from keras.losses import CategoricalCrossentropy
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
@@ -96,13 +97,17 @@ MP3_PATH = r'{}'.format(os.getcwd())
 
 def login_to_grailed(username, password):
     # Instantiate the WebDriver (e.g., Chrome driver)
-    driver = webdriver.Chrome()
+    service = Service(executable_path=r'/usr/bin/chromedriver')
+    options = webdriver.ChromeOptions()
+    #options.add_argument('--window-size=1920,1080')
+    #options.add_argument('--headless')
+    driver = webdriver.Chrome(service=service, options=options)
     login_url = "https://www.grailed.com/users/sign_up"
     driver.get(login_url)
     wait = WebDriverWait(driver, 20)
     try:
         element = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.LINK_TEXT, "Log in"))
+            EC.element_to_be_clickable((By.XPATH, '//a[@href="/users/sign_up"]'))
         )
         time.sleep(2)
         element.click()
@@ -163,7 +168,13 @@ def navigate_to_brand(driver, brand):
     search_bar.send_keys(Keys.RETURN)
     time.sleep(time1)
     if response.lower() == 'sold':
-        button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button/span[contains(text(), 'Filter')]"))).click()
+        try:
+            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button/span[contains(text(), 'Filter')]"))).click()
+        except TimeoutException:
+            window_width = 800
+            window_height = driver.get_window_size()['height']
+            driver.set_window_size(window_width, window_height)
+            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button/span[contains(text(), 'Filter')]"))).click()
         button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, '-attribute-item') and span[contains(@class, '-attribute-header') and text()='Show Only']]"))).click()        
         checkbox = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input.-toggle[name='sold']"))).click()
         time.sleep(1)
@@ -229,7 +240,7 @@ def sort_results(driver, results):
 def download_images(image_links, save_dir):
     os.makedirs(save_dir, exist_ok=True)  
     for i, link in enumerate(image_links):
-        image_name = f"1_image_{i}.jpg"
+        image_name = f"image_{i}.jpg"
         save_path = os.path.join(save_dir, image_name) 
         try:
             urllib.request.urlretrieve(link, save_path)
@@ -262,7 +273,7 @@ def delete_duplicate_images(duplicate_images):
         os.remove(file_path)
 
 listing_images = []
-save_dir = r"C:\Users\Jake Gurien\PycharmProjects\mcjpbot\Grailed-Scraper\new_dataset\train\Tops"
+save_dir = r"C:\Users\jguri\Desktop\Grailed-Scraper\new_dataset\validation\Tops"
 username = "dazzlesdaddy@gmail.com"
 password = "Jakey050603#"
 brand = input("What brand would you like to search? ")
