@@ -14,6 +14,7 @@ from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 import seaborn as sns
 import matplotlib.colors as mcolors
 from datetime import datetime, timedelta, date
@@ -95,13 +96,16 @@ MP3_PATH = r'{}'.format(os.getcwd())
 
 def login_to_grailed(username, password):
     # Instantiate the WebDriver (e.g., Chrome driver)
-    driver = webdriver.Chrome()
+    service = Service(executable_path=r'/usr/bin/chromedriver')
+    options = webdriver.ChromeOptions()
+    #options.add_argument('--headless')
+    driver = webdriver.Chrome(service=service, options=options)
     login_url = "https://www.grailed.com/users/sign_up"
     driver.get(login_url)
     wait = WebDriverWait(driver, 20)
     try:
         element = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.LINK_TEXT, "Log in"))
+            EC.element_to_be_clickable((By.XPATH, '//a[@href="/users/sign_up"]'))
         )
         time.sleep(2)
         element.click()
@@ -151,7 +155,6 @@ def login_to_grailed(username, password):
             except:
                 print('failed!')
                 driver.quit()
-    #pickle.dump(driver.get_cookies(), open(COOKIES_PATH, "wb"))
     navigate_to_brand(driver, brand)
     return 0
 
@@ -163,6 +166,7 @@ def navigate_to_brand(driver, brand):
     search_bar.send_keys(Keys.RETURN)
     time.sleep(time1)
     if response.lower() == 'sold':
+        time.sleep(200)
         button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button/span[contains(text(), 'Filter')]"))).click()
         button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, '-attribute-item') and span[contains(@class, '-attribute-header') and text()='Show Only']]"))).click()        
         checkbox = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input.-toggle[name='sold']"))).click()
