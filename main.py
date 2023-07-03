@@ -166,8 +166,13 @@ def navigate_to_brand(driver, brand):
     search_bar.send_keys(Keys.RETURN)
     time.sleep(time1)
     if response.lower() == 'sold':
-        time.sleep(200)
-        button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button/span[contains(text(), 'Filter')]"))).click()
+        try:
+            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button/span[contains(text(), 'Filter')]"))).click()
+        except TimeoutException:
+            window_width = 800
+            window_height = driver.get_window_size()['height']
+            driver.set_window_size(window_width, window_height)
+            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button/span[contains(text(), 'Filter')]"))).click()
         button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, '-attribute-item') and span[contains(@class, '-attribute-header') and text()='Show Only']]"))).click()        
         checkbox = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input.-toggle[name='sold']"))).click()
         time.sleep(1)
