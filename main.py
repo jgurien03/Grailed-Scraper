@@ -672,8 +672,12 @@ if response6.lower() == 'yes':
 else:
     print("Graph display skipped.")
 df4 = df
-predicted_price = predict_future_prices(df4, 2023, 8)
-print("Predicted price for August 2023:", predicted_price)
+response9 = input("Would you like to see a prediction of the price in the future? (yes/no): ")
+if response9.lower() == 'yes':
+    response10 = input("Choose a month as a number between 1 and 12 (making sure to remain in future months): ")
+    response11 = input("Choose the current year (e.g. 2023): ")
+    predicted_price = predict_future_prices(df4, int(response11), int(response10))
+    print("Predicted price for " ,response10, "/" ,response11, ": ",predicted_price)
 
 
 
