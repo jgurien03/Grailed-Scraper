@@ -295,12 +295,19 @@ def sort_results(driver, results):
             size_text = size_element.get_text()
             sizes.append(size_text)
 
-
+def make_background_white(image):
+    image = image.convert("RGBA")
+    width, height = image.size
+    white_image = Image.new("RGBA", (width, height), (255, 255, 255))
+    white_image.paste(image, (0, 0), image)
+    white_image = white_image.convert("RGB")
+    return white_image
 
 def predict_categories(model, image_paths):
     class_names = ['Accessories', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Skirts', 'Tops']
     response = requests.get(image_paths)
     img = image.load_img(BytesIO(response.content), target_size=(150, 150))
+    #img = make_background_white(img)
     img = image.img_to_array(img)
     img = tf.expand_dims(img, axis=0)
     img = tf.keras.applications.xception.preprocess_input(img)
@@ -543,7 +550,7 @@ def predict_future_prices(df1, target_year, target_month):
     for epoch in range(num_epochs):
         model.train()
         optimizer.zero_grad()
-        outputs = model(train_tensor[:-1].unsqueeze(dim=0))
+        outputs = model(train_tensor.unsqueeze(dim=0))
         loss = criterion(outputs.squeeze(), train_tensor[1:].squeeze())
         loss.backward()
         optimizer.step()

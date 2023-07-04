@@ -58,6 +58,7 @@ from sklearn.ensemble import RandomForestClassifier
 from keras.preprocessing.image import ImageDataGenerator
 from sklearn.model_selection import train_test_split
 from keras.applications.xception import Xception
+from keras.applications.vgg16 import VGG16
 from keras.applications.xception import preprocess_input
 from keras.applications.xception import decode_predictions
 from keras.applications.inception_v3 import InceptionV3, preprocess_input, decode_predictions
