@@ -77,6 +77,7 @@ from keras.models import Model
 from keras.layers import GlobalAveragePooling2D, Dense, Input
 from keras.optimizers import Adam
 from sklearn.preprocessing import LabelEncoder
+from dateutil.relativedelta import relativedelta
 import matplotlib.cm as cm
 from gensim.models import LdaModel
 from gensim.corpora import Dictionary
@@ -414,10 +415,16 @@ def plot_price_vs_upload_date(df, date):
         plt.tight_layout()
         plt.show()
     elif date == 'months' and any(df['Original Date'].str.contains('month')):
-        df_monthly_avg = df.groupby([df["Relative Date"].dt.year, df["Relative Date"].dt.month])["Original Price"].mean()
+        now = datetime.now()
+        current_month = now.month
+        current_year = now.year
+        start_date = now - relativedelta(months=11)
+        start_date = start_date.replace(day=1)
+        end_date = now
+        filtered_df = df[(df['Relative Date'] >= start_date) & (df['Relative Date'] <= end_date)]
+        df_monthly_avg = filtered_df.groupby([filtered_df["Relative Date"].dt.year, filtered_df["Relative Date"].dt.month])["Original Price"].mean()
         df_monthly_avg = df_monthly_avg.sort_index(ascending=True)
-        df_monthly_volume = df.groupby([df["Relative Date"].dt.year, df["Relative Date"].dt.month])["Title"].count()
-        df_monthly_volume = df_monthly_volume.sort_index(ascending=True)
+        df_monthly_volume = filtered_df.groupby([filtered_df["Relative Date"].dt.year, filtered_df["Relative Date"].dt.month])["Title"].count()
         min_volume = df_monthly_volume.min()
         max_volume = df_monthly_volume.max()
         normalized_volume = (df_monthly_volume - min_volume) / (max_volume - min_volume)
@@ -678,6 +685,9 @@ if response9.lower() == 'yes':
     response11 = input("Choose the current year (e.g. 2023): ")
     predicted_price = predict_future_prices(df4, int(response11), int(response10))
     print("Predicted price for " ,response10, "/" ,response11, ": ",predicted_price)
+else:
+    print('Skipping prediction')
+print('Goodbye!')
 
 
 
