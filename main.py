@@ -565,8 +565,6 @@ def new_dataset(df):
     merged_df.sort_values(by='Date', inplace=True)
     return merged_df
 
-
-
 class LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(LSTMModel, self).__init__()
@@ -579,7 +577,7 @@ class LSTMModel(nn.Module):
         output = self.fc(hidden_state[-1])
         return output
 
-def train_lstm_model(dataset, look_back=12, hidden_size=50, epochs=100, batch_size=32, learning_rate=0.001):
+def train_lstm_model(dataset, look_back=12, hidden_size=50, epochs=100, batch_size=32, learning_rate=0.01):
     # Extract features (Year and Month)
     features = dataset[['Year', 'Month']].values
 
@@ -622,7 +620,6 @@ def train_lstm_model(dataset, look_back=12, hidden_size=50, epochs=100, batch_si
         outputs = model(X_train)
         loss = criterion(outputs.squeeze(), y_train)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
         optimizer.step()
 
     # Evaluate the model
