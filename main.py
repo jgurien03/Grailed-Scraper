@@ -538,11 +538,9 @@ def new_dataset(df):
     if start_month <= 0:
         start_month += 12
         start_year -= 1
-
     # Set the end date to the current month
     end_month = current_month
     end_year = current_year
-
     # Create the start and end dates
     start_date = pd.to_datetime(f'{start_year}-{start_month:02d}-01')
     end_date = pd.to_datetime(f'{end_year}-{end_month:02d}-01')
@@ -556,8 +554,19 @@ def new_dataset(df):
             missing_dates.append(date)
             year = date.year
             month = date.month
-            average_price = merged_df.loc[merged_df['Year'] == start_year, 'Original Price'].mean()
-            average_volume = merged_df.loc[merged_df['Year'] == start_year, 'Volume'].mean()
+            lowest_price = merged_df['Original Price'].min()
+            lowest_volume = merged_df['Volume'].min()
+            # Define the range for fluctuations (e.g., -10% to +10%)
+            fluctuation_range = 0.1  # 10%
+            lower_limit = 1 - .5
+            upper_limit = 1 + fluctuation_range
+            # Generate random fluctuations around the lowest values
+            random_price = np.random.uniform(lower_limit, upper_limit) * lowest_price
+            random_volume = np.random.uniform(lower_limit, upper_limit) * lowest_volume
+            # Use the randomly fluctuated values
+            average_price = random_price
+            average_volume = random_volume
+            average_volume = random_volume
             new_row = {'Year': year, 'Month': month, 'Original Price': average_price, 'Volume': average_volume, 'Date': pd.to_datetime(date)}
             new_rows.append(new_row)
 
@@ -639,7 +648,8 @@ def add_months(start_date, num_months):
     new_date = start_date.replace(year=new_year, month=new_month, day=1)
     return new_date
 
-def generate_future_data(model, scaler, num_months, current_date, look_back=12):
+
+def generate_future_data(model, scaler, num_months, current_date, look_back=12, fluctuations=None):
     # Normalize the last available data
     current_sequence = scaler.transform(current_date[['Original Price', 'Volume']])
     # Extract the current year and month
@@ -669,6 +679,10 @@ def generate_future_data(model, scaler, num_months, current_date, look_back=12):
             predicted_price = model(input_tensor).squeeze(-1).tolist()[0]
             predicted_price = np.array([[predicted_price, 0]])  # Create a 2D array
 
+            # Add random fluctuations to the predicted price
+            if fluctuations is not None and _ < len(fluctuations):
+                predicted_price = predicted_price * fluctuations[_]
+
             # Create the next input sequence by appending the predicted price
             next_sequence = np.concatenate((future_data[-1][1:, :], predicted_price), axis=0)
             future_data.append(next_sequence)
@@ -679,10 +693,11 @@ def generate_future_data(model, scaler, num_months, current_date, look_back=12):
 
     # Extract only the predicted prices and corresponding months for the requested number of months
     future_prices = future_data[-num_months:, 0].astype(int)
-    start_date = datetime(temp_year, temp_month+1, 1)
+    start_date = datetime(temp_year, temp_month + 1, 1)
     future_months = [(add_months(start_date, i)).strftime('%B %Y') for i in range(num_months)]
     locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
     future_prices_with_sign = [locale.currency(price, grouping=True) for price in future_prices]
+    
     return future_months, future_prices_with_sign
 
 
@@ -724,7 +739,7 @@ if st.session_state.page == 1:
 if st.session_state.page == 2:
     st.header("Page 3: Await Results")
     if "scraping_done" not in st.session_state:
-        with st.spinner("Scraping in progress..."):
+        with st.spinner("Collecting Data..."):
             login_to_grailed(st.session_state.username, st.session_state.password, st.session_state.brand, st.session_state.response)
             data = {
                 'Title': titles,
@@ -773,7 +788,7 @@ if st.session_state.page == 2:
             df['Relative Date'] = df['Original Date'].apply(get_relative_date)
             st.session_state.df = df
             st.session_state.scraping_done = True
-            st.write('Done Scraping!')
+            st.write('Done!')
         if st.button("View Category Distribution"):
             st.session_state.page = 3
     else:
@@ -867,26 +882,68 @@ if st.session_state.page == 7:
     df4 = st.session_state.df
     st.header("Page 8: Predict Future Price for Brand")
     num_months = st.number_input("Enter the number of future months to see prices (1-12)", min_value=1, max_value=12, value=1, step=1)
+    fluctuation_range = 0.1
     if st.button("Predict"):
         dataset = new_dataset(df4)
+        if 'fluctuations' not in st.session_state:
+            fluctuations = np.random.uniform(1 - fluctuation_range, 1 + fluctuation_range, size=num_months)
+            st.session_state['fluctuations'] = fluctuations
+        else:
+            fluctuations = st.session_state['fluctuations']
         look_back = 12
-        model, scaler = train_lstm_model(dataset, look_back=look_back)
+        model_filename = "model.pt"
+        if os.path.isfile(model_filename):
+            model, scaler = torch.load(model_filename)
+        else:
+            model, scaler = train_lstm_model(dataset, look_back=look_back)
+            torch.save((model, scaler), model_filename)
         last_available_data = dataset[-look_back:]
-        predicted_months, predicted_prices = generate_future_data(model, scaler, num_months, last_available_data, look_back=look_back)
+        predicted_months, predicted_prices = generate_future_data(model, scaler, num_months, last_available_data, look_back=look_back, fluctuations=fluctuations)
         combined_data = list(zip(predicted_months, predicted_prices))
         final = pd.DataFrame(combined_data, columns=['Month', 'Price'])
-        st.write(final)
+        col1, col2 = st.columns([1, 1.5])
+        # Display the DataFrame in the first column
+        with col1:
+            st.write(final)
+            def get_dataframe_download_link():
+                csv = final.to_csv(index=False)
+                csv = csv.encode()
+                return csv
+            dataframe_link = get_dataframe_download_link()
+            st.download_button(label='Download DataFrame', data=dataframe_link, file_name='dataframe.csv', mime='text/csv')
 
-    if st.button("View DataFrame"):
+        # Display the bar graph in the second column
+        with col2:
+            fig, ax = plt.subplots() # Adjust the width and height as desired
+            ax.plot(final['Month'], final['Price'], marker='o')
+            ax.set_xlabel('Month')
+            ax.set_ylabel('Price')
+            ax.set_title('Future Monthly Prices', fontsize=16)
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            st.pyplot(fig)
+            def get_graph_download_link():
+                buf = io.BytesIO()
+                plt.savefig(buf, format='png')
+                buf.seek(0)
+                return buf
+            download_link = get_graph_download_link()
+            st.download_button(label='Download Graph', data=download_link, file_name='graph.png', mime='image/png')
+
+    if st.button("View Raw DataFrame of Brand"):
             st.session_state.page = 8
 if st.session_state.page == 8:
     st.header("Page 9: View DataFrame")
+    model_filename = "model.pt"
+    if os.path.isfile(model_filename):
+        os.remove(model_filename)
     st.write(st.session_state.df)
-    if st.button("Download DataFrame"):
-        df_csv = st.session_state.df.to_csv(index=False)
-        b64 = base64.b64encode(df_csv.encode()).decode()
-        href = f'<a href="data:file/csv;base64,{b64}" download="dataframe.csv">Download CSV File</a>'
-        st.markdown(href, unsafe_allow_html=True)
+    def get_dataframe_download_link():
+        csv = st.session_state.df.to_csv(index=False)
+        csv = csv.encode()
+        return csv
+    dataframe_link = get_dataframe_download_link()
+    st.download_button(label='Download DataFrame', data=dataframe_link, file_name='raw_dataframe.csv', mime='text/csv')
 
 
 
