@@ -17,14 +17,17 @@ from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
+from streamlit.components.v1 import html
 from selenium.webdriver.chrome.service import Service
 import seaborn as sns
 import matplotlib.colors as mcolors
+import io
 from datetime import datetime, timedelta, date
 from selenium.webdriver.support.ui import Select
 from matplotlib.cm import ScalarMappable
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
+import base64
 import cv2
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
@@ -37,6 +40,8 @@ from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 import nltk
 import bs4
+from torch.utils.data import DataLoader, TensorDataset, Dataset
+import torch.optim as optim
 from sklearn.neighbors import KNeighborsClassifier
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -50,6 +55,7 @@ import path
 from sklearn.cluster import KMeans
 from nltk.corpus import wordnet
 from PIL import Image, ImageOps
+from PIL import UnidentifiedImageError
 from io import BytesIO
 import whisper
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -67,6 +73,7 @@ import keras.utils as image
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
 from keras.preprocessing.image import ImageDataGenerator
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from sklearn.model_selection import train_test_split
 from keras.applications.xception import Xception
 from keras.applications.xception import preprocess_input
@@ -81,6 +88,8 @@ from dateutil.relativedelta import relativedelta
 import matplotlib.cm as cm
 from gensim.models import LdaModel
 from gensim.corpora import Dictionary
+import statsmodels.api as sm
+import streamlit as st
 
 fashion_mnist = keras.datasets.fashion_mnist
 
@@ -99,22 +108,22 @@ COOKIES_PATH = "cookies.pkl"
 time1 = random.randint(2, 6)
 MP3_PATH = r'{}'.format(os.getcwd())
 
-def login_to_grailed(username, password):
+def login_to_grailed(username, password, brand, response):
     # Instantiate the WebDriver (e.g., Chrome driver)
     service = Service(executable_path=r'/usr/bin/chromedriver')
     options = webdriver.ChromeOptions()
-    #options.add_argument('--headless')
+    # options.add_argument('--headless')
     driver = webdriver.Chrome(service=service, options=options)
     login_url = "https://www.grailed.com/users/sign_up"
     driver.get(login_url)
     wait = WebDriverWait(driver, 20)
+
     try:
         element = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, '//a[@href="/users/sign_up"]'))
         )
         time.sleep(2)
         element.click()
-        print("success in clicking Login in button")
     except:
         try:
             element = WebDriverWait(driver, 10).until(
@@ -122,30 +131,28 @@ def login_to_grailed(username, password):
             )
             time.sleep(2)
             element.click()
-            print("success in clicking Login in button")
         except:
-            print("Bot could not click on login button.")
             driver.quit()
+
     try:
         time.sleep(2)
         driver.find_element(By.CSS_SELECTOR, "button[data-cy='login-with-email']").click()
-        print("success in clicking Login in button")
     except:
-        print("Bot could not click on login button.")
         driver.quit()
+
     wait.until(EC.element_to_be_clickable((By.ID, "email"))).send_keys(username)
     time.sleep(2)
     wait.until(EC.element_to_be_clickable((By.ID, "password"))).send_keys(password)
+
     try:
         element = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-cy='auth-login-submit']"))
         )
         time.sleep(2)
         element.click()
-        print("success!")
     except:
         driver.quit()
-        print("failed!")
+
     try:
         submit_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']"))
@@ -154,25 +161,23 @@ def login_to_grailed(username, password):
         submit_button.click()
     except:
         if driver.current_url == 'https://www.grailed.com/':
-            print("success!")
+            st.write("Logged into Grailed!")
         else:
             try:
                 time.sleep(2)
                 click_button(driver)
-                print('success!!!!')
                 time.sleep(2)
                 driver.find_element(By.CLASS_NAME, "rc-audiochallenge-play-button").click()
                 time.sleep(5)
                 play_final(driver)
                 time.sleep(5)
             except:
-                print('failed!')
                 driver.quit()
-    navigate_to_brand(driver, brand)
+
+    navigate_to_brand(driver, brand, response)
     return 0
 
-
-def navigate_to_brand(driver, brand):
+def navigate_to_brand(driver, brand, response):
     search_bar = driver.find_element(By.CSS_SELECTOR, "input#header_search-input")
     search_bar.clear()
     search_bar.send_keys(brand)
@@ -201,7 +206,7 @@ def auto_scroll(driver):
     last_height = driver.execute_script("return document.body.scrollHeight")
     while True:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(1.5)
+        time.sleep(2)
         new_height = driver.execute_script("return document.body.scrollHeight")
         if new_height == last_height:
             break
@@ -296,25 +301,20 @@ def sort_results(driver, results):
             size_text = size_element.get_text()
             sizes.append(size_text)
 
-def make_background_white(image):
-    image = image.convert("RGBA")
-    width, height = image.size
-    white_image = Image.new("RGBA", (width, height), (255, 255, 255))
-    white_image.paste(image, (0, 0), image)
-    white_image = white_image.convert("RGB")
-    return white_image
 
 def predict_categories(model, image_paths):
     class_names = ['Accessories', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 'Skirts', 'Tops']
-    response = requests.get(image_paths)
-    img = image.load_img(BytesIO(response.content), target_size=(150, 150))
-    #img = make_background_white(img)
-    img = image.img_to_array(img)
-    img = tf.expand_dims(img, axis=0)
-    img = tf.keras.applications.xception.preprocess_input(img)
-    predictions = model.predict(img)
-    predicted_category = tf.argmax(predictions, axis=1)[0]
-    return class_names[predicted_category]
+    try:
+        response = requests.get(image_paths)
+        img = image.load_img(BytesIO(response.content), target_size=(150, 150))
+        img = image.img_to_array(img)
+        img = tf.expand_dims(img, axis=0)
+        img = tf.keras.applications.xception.preprocess_input(img)
+        predictions = model.predict(img)
+        predicted_category = tf.argmax(predictions, axis=1)[0]
+        return class_names[predicted_category]
+    except UnidentifiedImageError:
+        return "Unknown"
 
 
 def clean_up_categories(cell):
@@ -332,12 +332,18 @@ def clean_up_categories(cell):
 
 def visualize_category_distribution(df):
     category_counts = df['Category'].value_counts()
-    plt.bar(category_counts.index, category_counts.values)
-    plt.xlabel('Category')
-    plt.ylabel('Count')
-    plt.title('Distribution of Categories')
-    plt.xticks(rotation=45)
-    plt.show()
+    fig, ax = plt.subplots()
+    ax.bar(category_counts.index, category_counts.values)
+    ax.set_xlabel('Category')
+    ax.set_ylabel('Count')
+    ax.set_title('Distribution of Categories')
+    ax.set_xticklabels(category_counts.index, rotation=45)
+    img_buffer = io.BytesIO()
+    plt.savefig(img_buffer, format='png')
+    img_buffer.seek(0)
+    img_data = img_buffer.getvalue()
+    st.pyplot(fig)
+    return fig
 
 
 def plot_category_prices(df, category_col):
@@ -347,11 +353,14 @@ def plot_category_prices(df, category_col):
     category_prices = []
     for category in categories:
         category_prices.append(df[df[category_col] == category]['Current Price'].mean())
-    plt.bar(bar_positions, category_prices, width=bar_width)
-    plt.xticks(bar_positions, categories)
-    plt.ylabel('Price')
-    plt.title('Average Price Comparison ($)')
-    plt.show()
+    fig, ax = plt.subplots()
+    ax.bar(bar_positions, category_prices, width=bar_width)
+    ax.set_xticks(bar_positions)
+    ax.set_xticklabels(categories, rotation=45)
+    ax.set_ylabel('Price')
+    ax.set_title('Average Price Comparison ($)')
+    st.pyplot(fig)
+    return fig
 
 def get_relative_date(time_string):
     current_datetime = datetime.now()
@@ -413,7 +422,7 @@ def plot_price_vs_upload_date(df, date):
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax2.legend(lines + lines2, labels + labels2, loc='upper left')
         plt.tight_layout()
-        plt.show()
+        st.pyplot(fig)
     elif date == 'months' and any(df['Original Date'].str.contains('month')):
         now = datetime.now()
         current_month = now.month
@@ -444,7 +453,7 @@ def plot_price_vs_upload_date(df, date):
         ax.set_xticks(x_ticks)
         ax.set_xticklabels(x_labels, rotation=45)
         plt.tight_layout()
-        plt.show()
+        st.pyplot(fig)
     elif date == 'years' and (any(df['Original Date'].str.contains('year')) or any(df['Original Date'].str.contains('years'))):
         df_yearly_avg = df.groupby(df["Relative Date"].dt.year)["Original Price"].mean()
         df_yearly_avg = df_yearly_avg.sort_index(ascending=True)
@@ -464,13 +473,17 @@ def plot_price_vs_upload_date(df, date):
             ax.bar(x_ticks[i], price, color=color, alpha=0.7, edgecolor='black')
         colorbar = plt.cm.ScalarMappable(cmap='viridis')
         colorbar.set_array(normalized_volume)
-        plt.colorbar(colorbar, label='Volume')
+        plt.colorbar(colorbar, ax=ax, label='Volume')
         ax.set_xticks(x_ticks)
         ax.set_xticklabels(x_labels, rotation=45)
         plt.tight_layout()
-        plt.show()
+        st.pyplot(fig)
     else:
-        print('Not enough data to show')
+        fig, ax = plt.subplots()
+        ax.axis('off')
+        ax.text(0.5, 0.5, 'No data available', horizontalalignment='center', verticalalignment='center', fontsize=12)
+        st.pyplot(fig)
+    return fig
     
     
 def filter_rows_by_keyword(df, keyword):
@@ -505,80 +518,176 @@ def plot_price_by_size(df, size_col, price_col):
     cbar.set_label('Volume')
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.show()
+    st.pyplot(fig)
+    return fig
 
-def generate_volume(df):
-    volume_df = df.groupby(['Year', 'Month']).size().reset_index(name='Volume')
-    df = pd.merge(df, volume_df, on=['Year', 'Month'], how='left')
-    return df
 
-def predict_future_prices(df1, target_year, target_month):
-    df = df1
-    df = df.groupby([df['Relative Date'].dt.year.rename('Year'), df['Relative Date'].dt.month.rename('Month')])['Original Price'].mean().reset_index()
-    df = generate_volume(df)  # Generate synthetic volume based on count of prices
-    
-    train_size = int(len(df) * 0.8)
-    train_data = df.iloc[:train_size]
-    test_data = df.iloc[train_size:]
-    
-    scaler_price = MinMaxScaler()
-    train_data_scaled_price = scaler_price.fit_transform(train_data[['Original Price']])
-    test_data_scaled_price = scaler_price.transform(test_data[['Original Price']])
+def new_dataset(df):
+    df1 = df.copy()
+    df_monthly_avg = df1.groupby([df1['Relative Date'].dt.year.rename('Year'), df1['Relative Date'].dt.month.rename('Month')])['Original Price'].mean().reset_index()
+    df_monthly_volume = df1.groupby([df1['Relative Date'].dt.year.rename('Year'), df1['Relative Date'].dt.month.rename('Month')])['Title'].count().reset_index()
+    df_monthly_volume = df_monthly_volume.rename(columns={'Title': 'Volume'})
+    merged_df = pd.merge(df_monthly_avg, df_monthly_volume, on=['Year', 'Month'])
+    merged_df['Date'] = pd.to_datetime(merged_df[['Year', 'Month']].assign(day=1))
+    current_year = pd.Timestamp.today().year
+    current_month = pd.Timestamp.today().month
 
-    scaler_volume = MinMaxScaler()
-    train_data_scaled_volume = scaler_volume.fit_transform(train_data[['Volume']])
-    test_data_scaled_volume = scaler_volume.transform(test_data[['Volume']])
+    # Set the start date to 14 months ago
+    start_month = current_month - 14
+    start_year = current_year
+    if start_month <= 0:
+        start_month += 12
+        start_year -= 1
 
-    train_tensor = torch.from_numpy(np.column_stack((train_data_scaled_price, train_data_scaled_volume))).float()
-    test_tensor = torch.from_numpy(np.column_stack((test_data_scaled_price, test_data_scaled_volume))).float()
-    
-    class LSTM(nn.Module):
-        def __init__(self, input_size, hidden_size, output_size):
-            super(LSTM, self).__init__()
-            self.hidden_size = hidden_size
-            self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
-            self.fc = nn.Linear(hidden_size, output_size)
+    # Set the end date to the current month
+    end_month = current_month
+    end_year = current_year
 
-        def forward(self, x):
-            out, _ = self.lstm(x)
-            out = self.fc(out[:, -1, :])
-            return out
-    
-    input_size = 2  # Two input features: Original Price and Volume
-    hidden_size = 32
-    output_size = 1
-    num_epochs = 100
-    learning_rate = 0.001
-    
-    model = LSTM(input_size, hidden_size, output_size)
+    # Create the start and end dates
+    start_date = pd.to_datetime(f'{start_year}-{start_month:02d}-01')
+    end_date = pd.to_datetime(f'{end_year}-{end_month:02d}-01')
+
+    # Generate the date range
+    date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
+    missing_dates = []
+    new_rows = []
+    for date in date_range:
+        if not any((merged_df['Date'].dt.year == date.year) & (merged_df['Date'].dt.month == date.month)):
+            missing_dates.append(date)
+            year = date.year
+            month = date.month
+            average_price = merged_df.loc[merged_df['Year'] == start_year, 'Original Price'].mean()
+            average_volume = merged_df.loc[merged_df['Year'] == start_year, 'Volume'].mean()
+            new_row = {'Year': year, 'Month': month, 'Original Price': average_price, 'Volume': average_volume, 'Date': pd.to_datetime(date)}
+            new_rows.append(new_row)
+
+    merged_df = pd.concat([merged_df, pd.DataFrame(new_rows)], ignore_index=True)
+    merged_df.sort_values(by='Date', inplace=True)
+    return merged_df
+
+
+
+class LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(LSTMModel, self).__init__()
+        self.hidden_size = hidden_size
+        self.lstm = nn.LSTM(input_size, hidden_size)
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, input):
+        _, (hidden_state, _) = self.lstm(input)
+        output = self.fc(hidden_state[-1])
+        return output
+
+def train_lstm_model(dataset, look_back=12, hidden_size=50, epochs=100, batch_size=32, learning_rate=0.001):
+    # Extract features (Year and Month)
+    features = dataset[['Year', 'Month']].values
+
+    # Normalize the dataset
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    normalized_data = scaler.fit_transform(dataset[['Original Price', 'Volume']])
+
+    # Create input-output pairs for LSTM
+    X, y = [], []
+    for i in range(len(normalized_data) - look_back):
+        X.append(normalized_data[i:i+look_back])
+        y.append(normalized_data[i+look_back][0])  # Price is at index 0
+    X = np.array(X)
+    y = np.array(y)
+
+    # Adjust train-test split ratio
+    split_index = int(len(X) * 0.8)
+    X_train = X[:split_index]
+    y_train = y[:split_index]
+    X_test = X[split_index:]
+    y_test = y[split_index:]
+
+    # Convert data to PyTorch tensors
+    X_train = torch.tensor(X_train, dtype=torch.float32)
+    y_train = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
+    X_test = torch.tensor(X_test, dtype=torch.float32)
+    y_test = torch.tensor(y_test, dtype=torch.float32).view(-1, 1)
+
+    # Define the model
+    model = LSTMModel(X_train.shape[2], hidden_size, 1)
+
+    # Define loss function and optimizer
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    
-    for epoch in range(num_epochs):
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    # Train the model
+    for epoch in range(epochs):
         model.train()
         optimizer.zero_grad()
-        outputs = model(train_tensor.unsqueeze(dim=0))
-        loss = criterion(outputs.squeeze(), train_tensor[1:].squeeze())
+        outputs = model(X_train)
+        loss = criterion(outputs.squeeze(), y_train)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
         optimizer.step()
-    
+
+    # Evaluate the model
+    model.eval()
+    train_loss = criterion(model(X_train).squeeze(), y_train).item()
+    test_loss = criterion(model(X_test).squeeze(), y_test).item()
+    print("Training loss:", train_loss)
+    print("Testing loss:", test_loss)
+
+    return model, scaler
+
+def add_months(start_date, num_months):
+    month_offset = (start_date.month - 1 + num_months) % 12
+    year_offset = (start_date.month - 1 + num_months) // 12
+    new_month = month_offset + 1
+    new_year = start_date.year + year_offset
+    new_date = start_date.replace(year=new_year, month=new_month, day=1)
+    return new_date
+
+def generate_future_data(model, scaler, num_months, current_date, look_back=12):
+    # Normalize the last available data
+    current_sequence = scaler.transform(current_date[['Original Price', 'Volume']])
+    # Extract the current year and month
+    current_year = current_date['Year'].values[-1]
+    current_month = current_date['Month'].values[-1]
+    temp_year = current_year
+    temp_month = current_month
+
+    # Initialize the input sequence with the current data
+    future_data = [current_sequence]
+
     model.eval()
     with torch.no_grad():
-        future_tensor = torch.zeros(1, 2)  # Initialize a tensor for future prediction
-        future_tensor[0, 0] = test_data_scaled_price[-1, 0]  # Last observed price
-        future_tensor[0, 1] = test_data_scaled_volume[-1, 0]  # Last observed volume
-        
-        predicted_prices = []  # List to store predicted prices for each future month
-        for _ in range(target_month):
-            future_prediction = model(future_tensor.unsqueeze(dim=0))  # Make prediction for next month
-            future_tensor = torch.cat((future_tensor[:, :1], future_prediction), dim=1)
-            predicted_price = scaler_price.inverse_transform(future_prediction[:, 0].reshape(-1, 1)).squeeze()
-            predicted_prices.append(predicted_price)
-    
-    best_prediction = np.mean(predicted_prices)
-    locale.setlocale(locale.LC_ALL, '')  # Use the default system locale for formatting
-    formatted_prediction = locale.currency(best_prediction, grouping=True)
-    return formatted_prediction
+        for _ in range(num_months):
+            # Increment the month
+            if current_month == 12:
+                current_month = 1
+                current_year += 1
+            else:
+                current_month += 1
+
+            # Create the input tensor for prediction
+            input_tensor = torch.tensor(future_data[-1], dtype=torch.float32).unsqueeze(0)
+            input_tensor[:, -1, 0] = scaler.transform([[current_year, current_month]])[0][0]  # Set next month's year
+
+            # Reshape and predict the next month's price
+            predicted_price = model(input_tensor).squeeze(-1).tolist()[0]
+            predicted_price = np.array([[predicted_price, 0]])  # Create a 2D array
+
+            # Create the next input sequence by appending the predicted price
+            next_sequence = np.concatenate((future_data[-1][1:, :], predicted_price), axis=0)
+            future_data.append(next_sequence)
+
+    # Inverse transform the generated future data
+    future_data = np.array(future_data).reshape(-1, 2)
+    future_data = scaler.inverse_transform(future_data)
+
+    # Extract only the predicted prices and corresponding months for the requested number of months
+    future_prices = future_data[-num_months:, 0].astype(int)
+    start_date = datetime(temp_year, temp_month+1, 1)
+    future_months = [(add_months(start_date, i)).strftime('%B %Y') for i in range(num_months)]
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    future_prices_with_sign = [locale.currency(price, grouping=True) for price in future_prices]
+    return future_months, future_prices_with_sign
+
 
 
 titles = []
@@ -589,105 +698,199 @@ old_dates = []
 listing_images = []
 listing_links = []
 sizes = []
-username = "dazzlesdaddy@gmail.com"
-password = "Jakey050603#"
-brand = input("What brand would you like to search? ")
-response = input("Would you like to look at current or sold listings? (current/sold) ")
-login_to_grailed(username, password)
 
-data = {
-    'Title': titles,
-    'Current Price': prices,
-    'Original Price': old_prices,
-    'Size': sizes,
-    'Current Date': dates,
-    'Original Date': old_dates,
-    'Image Link': listing_images,
-    'Listing Link': listing_links
-}
+st.title("Grailed Data Visualizer")
 
-categories = {
-        'Tops': ['shirt', 'blouse', 't-shirt', 'tee', 'long-sleeve', 'longsleeve', 'long sleeve', 'short sleeve', 'sweater', 'tank', 'tank top', 'top', 'button-up', 'button-down', 'vest', 'polo', 'crop-top', 'box logo', 'sweatshirt'],
-        'Bottoms': ['pants', 'jeans', 'flare', 'baggy', 'pant', 'cargo', 'talon-zip', 'dickies', 'painted denim', 'sweatpants', 'shorts', 'pleats please', 'joggers'],
-        'Skirts': ['maxi', 'skirt', 'mini-skirt', 'pleated skirt', 'mini skirt', 'midi', 'midi skirt'],
-        'Dresses': ['dress', 'gown'],
-        'Shoes': ['loafer', 'shoes', 'sneakers', 'boots', 'jordan', 'air force one', 'chuck 70', 'guidi', 'rick owens ramones', 'dunk', 'gucci slides'],
-        'Outerwear': ['Fur leather', 'Half zip', 'Quarter zip', 'Suit', 'Outerwear', 'Jacket', 'Puffer', 'jacket', 'coat', 'blazer', 'bomber', 'trenchcoat', 'trucker jacket', 'hoodie', 'zip-up', 'pullover', 'windbreaker', 'cardigan', 'Denim Trucker Jacket'],
-        'Accessories': ['Sunglasses', 'Apron', 'Necklace', 'Watch', 'Socks', 'Tie', 'Bow tie', 'Purse', 'Ring', 'Gloves', 'belt', 
-                      'Scarf', 'Umbrella', 'Boots', 'Mittens', 'Stockings', 'Earmuffs', 'Hair band', 'Safety pin', 'Watch', 'Hat', 'Beanie', 'Cap', 'Beret', 'card holder', 'Straw hat', 'Derby hat', 'Helmet', 'Top hat', 'Mortar board']
-}
+if "page" not in st.session_state:
+    st.session_state.page = 1
 
-df = pd.DataFrame(data)
-df.insert(1,"Category", " ")
-model = load_model('model.h5')
-df['Category'] = df['Title'].apply(clean_up_categories)
-df = filter_rows_by_keyword(df, brand)
-for index, row in df.iterrows():
-    size = row['Size']
-    if isinstance(size, str) and size.lower() == 'os':
-        df.at[index, 'Category'] = 'Accessories'
-    elif isinstance(size, (int, float)) and 22 <= size <= 50:
-        df.at[index, 'Category'] = 'Bottoms'
-    elif isinstance(size, (int, float)) and 4 <= size <= 15:
-            df.at[index, 'Category'] = 'Shoes'
-for index, item in df.iterrows():
-    if df.at[index, 'Category'] == 'Other':
-        df.at[index, 'Category'] = predict_categories(model, item['Image Link'])
-        print(df.at[index, 'Category'])
-        print('grailed.com' + df.at[index, 'Listing Link'])
-df['Current Price'] = df['Current Price'].str.replace('[^\d.]', '', regex=True)
-df['Current Price'] = pd.to_numeric(df['Current Price'])
-df['Original Price'] = df['Original Price'].str.replace('[^\d.]', '', regex=True)
-df['Original Price'] = pd.to_numeric(df['Original Price'])
-df['Relative Date'] = df['Original Date'].apply(get_relative_date)
-response1 = input("Would you like to see each category and their feed appearance count? (yes/no): ")
-if response1.lower() == 'yes':
-    visualize_category_distribution(df)
-else:
-    print("Graph display skipped.")
-response2 = input("Would you like to see each category and their prices compared against each other? (yes/no): ")
-if response2.lower() == 'yes':
-    plot_category_prices(df, 'Category')
-else:
-    print("Graph display skipped.")
-response3 = input("Would you like to see the brand's change in price over time? (yes/no): ")
-if response3.lower() == 'yes':
-    df2 = df
-    date = input("Would you like to search by days, months, or years? (days/months/years) ")
-    if date.lower() == 'days' or date.lower() =='months' or date.lower() == 'years':
-        response4 = input("Would you like to only visualize a certain category of brand? (yes/no): ")
+if st.session_state.page == 1:
+    st.header("Page 1: Brand and Current/Sold Option")
+    if "brand" not in st.session_state:
+        st.session_state.brand = ""
+    brand = st.text_input("What brand would you like to search?")
+    if "response" not in st.session_state:
+        st.session_state.response = ""
+    response = st.selectbox("Would you like to look at current or sold listings?", ("current", "sold"))
+    st.header("Page 2: Login")
+    if "loading" not in st.session_state:
+        st.session_state.loading = False
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        st.session_state.brand = brand
+        st.session_state.response = response
+        st.session_state.username = username
+        st.session_state.password = password
+        st.session_state.page = 2
+
+if st.session_state.page == 2:
+    st.header("Page 3: Await Results")
+    if "scraping_done" not in st.session_state:
+        with st.spinner("Scraping in progress..."):
+            login_to_grailed(st.session_state.username, st.session_state.password, st.session_state.brand, st.session_state.response)
+            data = {
+                'Title': titles,
+                'Current Price': prices,
+                'Original Price': old_prices,
+                'Size': sizes,
+                'Current Date': dates,
+                'Original Date': old_dates,
+                'Image Link': listing_images,
+                'Listing Link': listing_links
+            }
+
+            categories = {
+                    'Tops': ['shirt', 'blouse', 't-shirt', 'tee', 'long-sleeve', 'longsleeve', 'long sleeve', 'short sleeve', 'sweater', 'tank', 'tank top', 'top', 'button-up', 'button-down', 'vest', 'polo', 'crop-top', 'box logo', 'sweatshirt'],
+                    'Bottoms': ['pants', 'jeans', 'flare', 'baggy', 'pant', 'cargo', 'talon-zip', 'dickies', 'painted denim', 'sweatpants', 'shorts', 'pleats please', 'joggers'],
+                    'Skirts': ['maxi', 'skirt', 'mini-skirt', 'pleated skirt', 'mini skirt', 'midi', 'midi skirt'],
+                    'Dresses': ['dress', 'gown'],
+                    'Shoes': ['loafer', 'shoes', 'sneakers', 'boots', 'jordan', 'air force one', 'chuck 70', 'guidi', 'rick owens ramones', 'dunk', 'gucci slides'],
+                    'Outerwear': ['Fur leather', 'Half zip', 'Quarter zip', 'Suit', 'Outerwear', 'Jacket', 'Puffer', 'jacket', 'coat', 'blazer', 'bomber', 'trenchcoat', 'trucker jacket', 'hoodie', 'zip-up', 'pullover', 'windbreaker', 'cardigan', 'Denim Trucker Jacket'],
+                    'Accessories': ['Sunglasses', 'Apron', 'Necklace', 'Watch', 'Socks', 'Tie', 'Bow tie', 'Purse', 'Ring', 'Gloves', 'belt', 
+                                'Scarf', 'Umbrella', 'Boots', 'Mittens', 'Stockings', 'Earmuffs', 'Hair band', 'Safety pin', 'Watch', 'Hat', 'Beanie', 'Cap', 'Beret', 'card holder', 'Straw hat', 'Derby hat', 'Helmet', 'Top hat', 'Mortar board']
+            }
+
+            df = pd.DataFrame(data)
+            df.insert(1,"Category", " ")
+            model = load_model('model.h5')
+            df['Category'] = df['Title'].apply(clean_up_categories)
+            df = filter_rows_by_keyword(df, brand)
+            for index, row in df.iterrows():
+                size = row['Size']
+                if isinstance(size, str) and size.lower() == 'os':
+                    df.at[index, 'Category'] = 'Accessories'
+                elif isinstance(size, (int, float)) and 22 <= size <= 50:
+                    df.at[index, 'Category'] = 'Bottoms'
+                elif isinstance(size, (int, float)) and 4 <= size <= 15:
+                        df.at[index, 'Category'] = 'Shoes'
+            for index, item in df.iterrows():
+                if df.at[index, 'Category'] == 'Other':
+                    df.at[index, 'Category'] = predict_categories(model, item['Image Link'])
+                    print(df.at[index, 'Category'])
+                    print('grailed.com' + df.at[index, 'Listing Link'])
+            df['Current Price'] = df['Current Price'].str.replace('[^\d.]', '', regex=True)
+            df['Current Price'] = pd.to_numeric(df['Current Price'])
+            df['Original Price'] = df['Original Price'].str.replace('[^\d.]', '', regex=True)
+            df['Original Price'] = pd.to_numeric(df['Original Price'])
+            df['Relative Date'] = df['Original Date'].apply(get_relative_date)
+            st.session_state.df = df
+            st.session_state.scraping_done = True
+            st.write('Done Scraping!')
+        if st.button("View Category Distribution"):
+            st.session_state.page = 3
+    else:
+        st.session_state.page = 3
+
+if st.session_state.page == 3:
+    st.header("Page 4: Category Distribution")
+    fig = visualize_category_distribution(st.session_state.df)
+    canvas = FigureCanvas(fig)
+    buffer = io.BytesIO()
+    canvas.print_png(buffer)
+    img_data = base64.b64encode(buffer.getvalue()).decode()
+    st.markdown(
+        f'<a href="data:image/png;base64,{img_data}" download="category_distribution.png">Download Category Distribution</a>',
+        unsafe_allow_html=True
+    )
+    if st.button("View Prices by Category"):
+        st.session_state.page = 4
+if st.session_state.page == 4:
+    st.header("Page 5: Prices by Category")
+    fig = plot_category_prices(st.session_state.df, 'Category')
+    
+    img_path = "prices_by_category.png"
+    fig.savefig(img_path, bbox_inches="tight")
+        
+    with open(img_path, "rb") as f:
+        img_data = f.read()
+        img_base64 = base64.b64encode(img_data).decode()
+        st.markdown(
+            f'<a href="data:image/png;base64,{img_base64}" download="prices_by_category.png">Download Prices by Category</a>',
+            unsafe_allow_html=True
+        )
+    os.remove(img_path)
+    if st.button("View Prices over Time"):
+        st.session_state.page = 5
+if st.session_state.page == 5:
+    st.header("Page 6: Prices over Time")
+    date = st.selectbox("Would you like to search by days, months, or years?", ("days", "months", "years"))
+    if date.lower() in ['days', 'months', 'years']:
+        response4 = st.selectbox("Would you like to only visualize a certain category of brand?", ("Yes", "No"))
         if response4.lower() == 'yes':
-            response5 = input("Select a category: (Tops, Bottoms, Skirts, Dresses, Shoes, Outerwear, Accessories) ")
-            df2 = filter_dataframe_by_category(df, 'Category', response5)
-            plot_price_vs_upload_date(df2, date)
+            response5 = st.selectbox("Select a category:", ("Tops", "Bottoms", "Skirts", "Dresses", "Shoes", "Outerwear", "Accessories"))
+            df2 = filter_dataframe_by_category(st.session_state.df, 'Category', response5)
+            fig = plot_price_vs_upload_date(df2, date)
+            img_path = "prices_over_time.png"
+            fig.savefig(img_path, bbox_inches="tight")
+            with open(img_path, "rb") as f:
+                img_data = f.read()
+                img_base64 = base64.b64encode(img_data).decode()
+                st.markdown(
+                    f'<a href="data:image/png;base64,{img_base64}" download="prices_over_time.png">Download Prices over Time</a>',
+                    unsafe_allow_html=True
+                )
+            os.remove(img_path)
         else:
-            plot_price_vs_upload_date(df2, date)
-    else:
-        print('Must specify days, months, or years')
-else:
-    print("Graph display skipped.") 
-response6 = input("Would you like to see each size and their average price? (yes/no): ")
-if response6.lower() == 'yes':
-    df3 = df
-    response7 = input("Would you like to only visualize a certain category of brand? (yes/no): ")
+            fig = plot_price_vs_upload_date(st.session_state.df, date)
+            img_path = "prices_over_time.png"
+            fig.savefig(img_path, bbox_inches="tight")
+            with open(img_path, "rb") as f:
+                img_data = f.read()
+                img_base64 = base64.b64encode(img_data).decode()
+                st.markdown(
+                    f'<a href="data:image/png;base64,{img_base64}" download="prices_over_time.png">Download Prices Over Time</a>',
+                    unsafe_allow_html=True
+                )
+            os.remove(img_path)
+        if st.button("View Prices by Size"):
+            st.session_state.page = 6
+if st.session_state.page == 6:
+    st.header("Page 7: Price by Size")
+    response7 = st.selectbox("Would you like to only visualize a certain category of brand?", ("Yes", "No"), key="response7")
     if response7.lower() == 'yes':
-        response8 = input("Select a category: (Tops, Bottoms, Skirts, Dresses, Shoes, Outerwear, Accessories) ")
-        df3 = filter_dataframe_by_category(df, 'Category', response8)
-        plot_price_by_size(df3, 'Size', 'Original Price')
+        response8 = st.selectbox("Select a category:", ("Tops", "Bottoms", "Skirts", "Dresses", "Shoes", "Outerwear", "Accessories"), key="response8")
+        df3 = filter_dataframe_by_category(st.session_state.df, 'Category', response8)
+        fig = plot_price_by_size(df3, 'Size', 'Original Price')
     else:
-        plot_price_by_size(df3, 'Size', 'Original Price')
-else:
-    print("Graph display skipped.")
-df4 = df
-response9 = input("Would you like to see a prediction of the price in the future? (yes/no): ")
-if response9.lower() == 'yes':
-    response10 = input("Choose a month as a number between 1 and 12 (making sure to remain in future months): ")
-    response11 = input("Choose the current year (e.g. 2023): ")
-    predicted_price = predict_future_prices(df4, int(response11), int(response10))
-    print("Predicted price for " ,response10, "/" ,response11, ": ",predicted_price)
-else:
-    print('Skipping prediction')
-print('Goodbye!')
+        fig = plot_price_by_size(st.session_state.df, 'Size', 'Original Price')
+    img_path = "price_by_size.png"
+    fig.savefig(img_path, bbox_inches="tight")
+    with open(img_path, "rb") as f:
+        img_data = f.read()
+        img_base64 = base64.b64encode(img_data).decode()
+        st.markdown(
+            f'<a href="data:image/png;base64,{img_base64}" download="price_by_size.png">Download Prices by Size</a>',
+            unsafe_allow_html=True
+        )
+    os.remove(img_path)
+    if st.button("Predict Future Prices"):
+            st.session_state.page = 7
+if st.session_state.page == 7:
+    df4 = st.session_state.df
+    st.header("Page 8: Predict Future Price for Brand")
+    num_months = st.number_input("Enter the number of future months to see prices (1-12)", min_value=1, max_value=12, value=1, step=1)
+    if st.button("Predict"):
+        dataset = new_dataset(df4)
+        look_back = 12
+        model, scaler = train_lstm_model(dataset, look_back=look_back)
+        last_available_data = dataset[-look_back:]
+        predicted_months, predicted_prices = generate_future_data(model, scaler, num_months, last_available_data, look_back=look_back)
+        combined_data = list(zip(predicted_months, predicted_prices))
+        final = pd.DataFrame(combined_data, columns=['Month', 'Price'])
+        st.write(final)
+
+    if st.button("View DataFrame"):
+            st.session_state.page = 8
+if st.session_state.page == 8:
+    st.header("Page 9: View DataFrame")
+    st.write(st.session_state.df)
+    if st.button("Download DataFrame"):
+        df_csv = st.session_state.df.to_csv(index=False)
+        b64 = base64.b64encode(df_csv.encode()).decode()
+        href = f'<a href="data:file/csv;base64,{b64}" download="dataframe.csv">Download CSV File</a>'
+        st.markdown(href, unsafe_allow_html=True)
+
 
 
 
