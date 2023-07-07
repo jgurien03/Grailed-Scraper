@@ -25,6 +25,7 @@ import io
 from datetime import datetime, timedelta, date
 from selenium.webdriver.support.ui import Select
 from matplotlib.cm import ScalarMappable
+from matplotlib import colors
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 import base64
@@ -351,14 +352,24 @@ def plot_category_prices(df, category_col):
     bar_positions = np.arange(len(categories))
     bar_width = 0.4
     category_prices = []
+    category_volumes = []
     for category in categories:
         category_prices.append(df[df[category_col] == category]['Current Price'].mean())
+        category_volumes.append(df[df[category_col] == category]['Category'].count())
+    norm = colors.Normalize(vmin=min(category_volumes), vmax=max(category_volumes))
+    category_volumes_norm = norm(category_volumes)
+    cmap = plt.cm.get_cmap('viridis')  # Set the colormap to 'viridis'
     fig, ax = plt.subplots()
-    ax.bar(bar_positions, category_prices, width=bar_width)
+    ax.bar(bar_positions, category_prices, width=bar_width, color=cmap(category_volumes_norm))
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax)
+    cbar.set_label('Volume')
     ax.set_xticks(bar_positions)
     ax.set_xticklabels(categories, rotation=45)
     ax.set_ylabel('Price')
     ax.set_title('Average Price Comparison ($)')
+    plt.tight_layout()
     st.pyplot(fig)
     return fig
 
@@ -914,12 +925,19 @@ if st.session_state.page == 7:
 
         # Display the bar graph in the second column
         with col2:
-            fig, ax = plt.subplots() # Adjust the width and height as desired
-            ax.plot(final['Month'], final['Price'], marker='o')
+            final['Month'] = pd.to_datetime(final['Month'])
+
+            # Set the figure size
+            fig, ax = plt.subplots(figsize=(8, 6))  # Adjust the width and height as desired
+            ax.plot(final['Month'], final['Price'].str.replace('$', '').astype(float), marker='o')
             ax.set_xlabel('Month')
-            ax.set_ylabel('Price')
+            ax.set_ylabel('Price ($)')
             ax.set_title('Future Monthly Prices', fontsize=16)
             plt.xticks(rotation=45)
+
+            # Set the x-axis limits
+            ax.set_xlim(final['Month'].min(), final['Month'].max())
+
             plt.tight_layout()
             st.pyplot(fig)
             def get_graph_download_link():
