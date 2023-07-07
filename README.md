@@ -33,8 +33,8 @@ After collecting, cleaning, and plotting my data, there was still one more thing
 
 Overall, this project provided a useful insight into how fashion trends change over time. With the boom of social medias such as TikTok in the fashion community, I could actively see how certain echochambers and groups on social media contributed to the rising prices of certain brands on Grailed, which was amazing to see. 
 
-## What Lies Ahead
+## How To Run
 
-In the future, I would like to convert this project to a streamlit app so it can be more user friendly. At the moment, I have a discord bot working which can be found at this link: https://github.com/jgurien03/grailed-bot 
+To run this program, simple type the command streamlit run d:/streamlit-grailed/main.py in your terminal after cloning this repository and it will launch the streamlit app. Then, you can simply follow the labels given on the webpage, and you can extract, interact with, and download your customized data. Also, please run through the entire webpage to properly reset and configure models for training/testing. If you have any further questions or concerns about the project, you can email me at jgurien@ucsc.edu
 
-If you have any concerns or questions about the project, you can email me at jgurien@ucsc.edu
+At the moment, I also have a discord bot working which can be found at this link: https://github.com/jgurien03/grailed-bot 
