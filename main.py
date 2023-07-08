@@ -542,21 +542,15 @@ def new_dataset(df):
     merged_df['Date'] = pd.to_datetime(merged_df[['Year', 'Month']].assign(day=1))
     current_year = pd.Timestamp.today().year
     current_month = pd.Timestamp.today().month
-
-    # Set the start date to 14 months ago
     start_month = current_month - 14
     start_year = current_year
     if start_month <= 0:
         start_month += 12
         start_year -= 1
-    # Set the end date to the current month
     end_month = current_month
     end_year = current_year
-    # Create the start and end dates
     start_date = pd.to_datetime(f'{start_year}-{start_month:02d}-01')
     end_date = pd.to_datetime(f'{end_year}-{end_month:02d}-01')
-
-    # Generate the date range
     date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
     missing_dates = []
     new_rows = []
@@ -671,9 +665,9 @@ def generate_future_data(model, scaler, num_months, current_date, look_back=12, 
 
     # Initialize the input sequence with the current data
     future_data = [current_sequence]
-
     model.eval()
     with torch.no_grad():
+        torch.manual_seed(0)
         for _ in range(num_months):
             # Increment the month
             if current_month == 12:
