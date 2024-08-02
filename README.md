@@ -42,3 +42,5 @@ Overall, this project provided a useful insight into how fashion trends change o
 To run this program, simple type the command streamlit run d:/streamlit-grailed/main.py in your terminal after cloning this repository and it will launch the streamlit app. Then, you can simply follow the labels given on the webpage, and you can extract, interact with, and download your customized data. Also, please run through the entire webpage to properly reset and configure models for training/testing. If you have any further questions or concerns about the project, you can email me at jgurien@ucsc.edu
 
 At the moment, I also have a discord bot working which can be found at this link: https://github.com/jgurien03/grailed-bot 
+
+Owners - Jake Gurien, Nico Vitagliano
